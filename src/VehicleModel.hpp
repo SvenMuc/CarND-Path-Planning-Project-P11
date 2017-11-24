@@ -32,6 +32,7 @@ public:
   double yaw_;            // yaw angle (orientation) [rad]
   double s_;              // frenet s coordinate
   double d_;              // frenet d coordinate
+  bool updated_;          // true if attributes are up-to date
 
   /**
    Constructor initializes a default vehicle model.

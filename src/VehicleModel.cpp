@@ -22,6 +22,7 @@ VehicleModel::VehicleModel() {
   v_ = 0.0;
   a_ = 0.0;
   yaw_ = 0.0;
+  updated_ = false;
 }
 
 VehicleModel::VehicleModel(int id, double x, double y, double vx, double vy, double s, double d) {
@@ -38,6 +39,8 @@ VehicleModel::VehicleModel(int id, double x, double y, double vx, double vy, dou
   v_ = sqrt(vx_ * vx_ + vy_ * vy_);
   a_ = sqrt(ax_ * ax_ + ay_ * ay_);
   yaw_ = vx_ < 0 ? atan(vy_ / vx_) : 0.0f;
+  
+  updated_ = true;
 }
 
 VehicleModel::VehicleModel(double x, double y, double s, double d, double yaw, double velocity) {
@@ -54,6 +57,8 @@ VehicleModel::VehicleModel(double x, double y, double s, double d, double yaw, d
   v_ = velocity;
   a_ = sqrt(ax_ * ax_ + ay_ * ay_);
   yaw_ = yaw;
+  
+  updated_ = true;
 }
 
 std::ostream& operator<< (std::ostream& os, const VehicleModel& vehicleModel) {
@@ -70,7 +75,8 @@ std::ostream& operator<< (std::ostream& os, const VehicleModel& vehicleModel) {
     " a=" << vehicleModel.a_ <<
     " yaw=" << vehicleModel.yaw_ <<
     " s=" << vehicleModel.s_ <<
-    " d=" << vehicleModel.d_ << ")";
+    " d=" << vehicleModel.d_ <<
+    " updated=" << vehicleModel.updated_ << ")";
   } else {
     os << "VehicleModel(NULL)";
   }

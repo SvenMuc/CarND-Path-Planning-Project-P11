@@ -82,6 +82,14 @@ int main() {
   SensorFusion fusion = SensorFusion();
   BehaviorPlanner behavior_planner = BehaviorPlanner(&fusion, speed_limit, current_lane);
   TrajectoryPlanner trajectroy_planner = TrajectoryPlanner(&fusion, speed_limit, current_lane);
+  
+  // set speed limits for all lanes
+  std::vector<double> limits;
+  limits.push_back(speed_limit);
+  limits.push_back(speed_limit);
+  limits.push_back(speed_limit);
+  
+  fusion.SetSpeedLimitsForLanes(limits);
 
   
   h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy,&current_lane,&fusion,&behavior_planner,&trajectroy_planner](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
@@ -123,12 +131,15 @@ int main() {
           cout << "------------------------------------------------------------------------" << endl;
           
           // prepare the sensor fusion with host vehicle and list of vehicle models
+          fusion.ResetUpdateFlagForAllVehicles();
           fusion.SetHostVehicleModel(car_x, car_y, car_s, car_d, car_yaw, car_speed);
           
           for (auto obj: sensor_fusion) {
             VehicleModel* vehicle = new VehicleModel(obj[0], obj[1], obj[2], obj[3], obj[4], obj[5], obj[6]);
-            fusion.AddVehicleModel(vehicle);
+            fusion.UpdateVehicleModel(vehicle);
           }
+          
+          fusion.RemoveOutdatedVehicleModels();
           
           cout << fusion;
           
@@ -173,7 +184,7 @@ int main() {
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
           
           // clean-up
-          fusion.RemoveAll();
+          fusion.RemoveAllVehicleModels();
         }
       } else {
         // Manual driving
