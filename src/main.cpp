@@ -80,19 +80,16 @@ int main() {
   double speed_limit = 49.5 * 0.44704;    // max allowed speed [m/s]
   
   SensorFusion fusion = SensorFusion();
-  BehaviorPlanner behavior_planner = BehaviorPlanner(&fusion, speed_limit, current_lane);
-  TrajectoryPlanner trajectroy_planner = TrajectoryPlanner(&fusion, speed_limit, current_lane);
   
   // set speed limits for all lanes
-  std::vector<double> limits;
-  limits.push_back(speed_limit);
-  limits.push_back(speed_limit);
-  limits.push_back(speed_limit);
-  
+  std::vector<double> limits = {speed_limit, speed_limit, speed_limit};
   fusion.SetSpeedLimitsForLanes(limits);
 
+  BehaviorPlanner behavior_planner = BehaviorPlanner(&fusion, speed_limit, current_lane);
+  TrajectoryPlanner trajectory_planner = TrajectoryPlanner(&fusion, &behavior_planner, speed_limit, current_lane);
   
-  h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy,&current_lane,&fusion,&behavior_planner,&trajectroy_planner](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
+  
+  h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy,&current_lane,&fusion,&behavior_planner,&trajectory_planner](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
@@ -130,7 +127,7 @@ int main() {
                     
           cout << "------------------------------------------------------------------------" << endl;
           
-          // prepare the sensor fusion with host vehicle and list of vehicle models
+          // Update sensor fusion
           fusion.ResetUpdateFlagForAllVehicles();
           fusion.SetHostVehicleModel(car_x, car_y, car_s, car_d, car_yaw, car_speed);
           
@@ -139,40 +136,26 @@ int main() {
             fusion.UpdateVehicleModel(vehicle);
           }
           
-          fusion.RemoveOutdatedVehicleModels();
-          
+          fusion.Update(kPredictionTime);
           cout << fusion;
           
-//          VehicleModel* frontLane0 = sf.GetNextVehicleDrivingAhead(0);
-//          VehicleModel* frontLane1 = sf.GetNextVehicleDrivingAhead(1);
-//          VehicleModel* frontLane2 = sf.GetNextVehicleDrivingAhead(2);
-//          cout << "Front L0=" << *frontLane0 << endl;
-//          cout << "Front L1=" << *frontLane1 << endl;
-//          cout << "Front L2=" << *frontLane2 << endl;
-//          
-//          VehicleModel* rearLane0 = sf.GetNextVehicleDrivingBehind(0);
-//          VehicleModel* rearLane1 = sf.GetNextVehicleDrivingBehind(1);
-//          VehicleModel* rearLane2 = sf.GetNextVehicleDrivingBehind(2);
-//          cout << "Rear L0=" << *rearLane0 << endl;
-//          cout << "Rear L1=" << *rearLane1 << endl;
-//          cout << "Rear L2=" << *rearLane2 << endl;
-          
-          // Behavior Planner
-          BehaviorState next_behavior = behavior_planner.NextBehavior();
-          cout << "Next Behavior: " << static_cast<int>(next_behavior) << " - " << behavior_planner.GetStateAsString(next_behavior) << endl;
+          // Update behavior planner
+          behavior_planner.Update();
+          cout << behavior_planner;
 
-          // Trajectory Planner
+          // Update trajectory planner
           PreviousTrajectory previous_trajectory;
           previous_trajectory.points_x = previous_path_x;
           previous_trajectory.points_y = previous_path_y;
           previous_trajectory.end_point_s = end_path_s;
           previous_trajectory.end_point_d = end_path_d;
           
-          trajectroy_planner.SetMapWaypoints(map_waypoints_x, map_waypoints_y,
+          trajectory_planner.SetMapWaypoints(map_waypoints_x, map_waypoints_y,
                                              map_waypoints_s,
                                              map_waypoints_dx, map_waypoints_dy);
           
-          Trajectory trajectory = trajectroy_planner.PlanOptimalTrajectory(previous_trajectory, next_behavior);
+          Trajectory trajectory = trajectory_planner.PlanOptimalTrajectory(previous_trajectory);
+          cout << trajectory_planner;
           
           json msgJson;
           msgJson["next_x"] = trajectory.points_x;
