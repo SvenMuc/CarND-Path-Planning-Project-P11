@@ -13,6 +13,7 @@
 #include <vector>
 #include <map>
 #include "VehicleModel.hpp"
+#include "Eigen-3.3/Eigen/Core"
 
 /**
  SensorFusion class
@@ -24,8 +25,12 @@ class SensorFusion {
 public:
   VehicleModel host_vehicle_;                        // host vehicle model
   std::vector<double> speed_limits_;                 // speed limits per lane [0-left, 1-center, 2-right] [m/s]
-  const double kLaneWidth = 4.0f;                    // default lane width
+  int number_lanes_;                                 // number of lanes
+  Eigen::VectorXd average_lane_velocities_;          // average velocity per lane [s/s]
   
+  const double kLaneWidth_ = 4.0;                    // default lane width
+  double const kMaxDistanceForAvgVelocity_ = 100.0;  // The average velocity is calucalted for vehicles in range of +/- x m
+
   /**
    Constructor.
    */
@@ -35,6 +40,13 @@ public:
    Destructor.
    */
   ~SensorFusion();
+  
+  /**
+   Update the sensor fusion model (e.g. predictions, lane assignments, etc.).
+   
+   @param prediction_time  Number of seconds to predict into the future [s].
+   */
+  void Update(double prediction_time);
   
   /**
    Set host vehicle model.
@@ -94,6 +106,15 @@ public:
   int CountVehicleModels();
   
   /**
+   Get all vehicle driving in requested lane.
+
+   @param lane  Lane id [0 = left lane, 1 = center lane, 2 = right lane]
+   
+   @return Returns a vector of vehicles.
+   */
+  std::vector<VehicleModel*> GetAllVehiclesForLane(int lane);
+  
+  /**
    Find next vehicle driving ahead in given lane.
    
    @param lane  Lane id [0 = left lane, 1 = center lane, 2 = right lane]
@@ -122,14 +143,53 @@ public:
    lane is not existing 0 m/s is returned.
    */
   double GetSpeedLimitForLane(int lane);
-  
+
+  /**
+   Get fastes lane.
+   
+   @return Returns the id of the fastest lane [-1=unknown, 0=left, 1=center, 2=right].
+   */
+  int GetFastestLane();
+
+  /**
+   Get fastes lane which is either the adjacent or host lane.
+   
+   @return Returns the id of the fastest reachable lane [-1=unknown, 0=left, 1=center, 2=right].
+   */
+  int GetReachableFastestLane();
+
   /**
    Overload standard output stream.
    */
   friend std::ostream& operator<< (std::ostream& os, const SensorFusion& obj);
   
 private:
-  std::map<int, VehicleModel*> object_map_;           // Map of vehicle models <id, VehicleModel>
+  std::map<int, VehicleModel*> object_map_;            // Map of vehicle models <id, VehicleModel>
+  
+  /**
+   Determines the driving lane for the vehicle.
+   
+   @param model  Pointer to a vehicle model.
+   
+   @return Returns the driving lane [-1=unknonw, 0=left, 1=center, 2=right].
+   */
+  int GetDrivingLaneForVehicle(const VehicleModel* model);
+  
+  /**
+   Predict all vehicle trajectories the given seconds into the future.
+   
+   @param prediction_time  Number of seconds to predict into the future [s].
+   */
+  void GenerateVehicleModelPredictions(double prediction_time);
+
+  /**
+   Determine average velocity for all laneas. If a lane is free the speed limit
+   is returned. For the host lane only vehicles driving ahead are considered.
+   
+   @return Returns a vector with average velocities [m/s] for left, center and
+   right lane.
+   */
+  Eigen::VectorXd GetAverageVelocityForAllLanes();
 };
 
 #endif /* SensorFusion_hpp */
