@@ -45,10 +45,14 @@ const int kSensorFusionIndexD  = 6;
  */
 class BehaviorPlanner {
 public:
+  SensorFusion* sensor_fusion_;             // list of vehicle models based on sensor fusion
   BehaviorState current_state_;             // current FSM state (behavior)
   int current_lane_;                        // current lane ID
+  int target_lane_;                         // target lane ID
+  int fastest_lane_;                        // fastest lane ID
   double ref_velocity_;                     // reference velocity to target [m/s]
-  SensorFusion* sensor_fusion_;             // list of vehicle models based on sensor fusion
+  double time_gap_;                         // time gap to vehicle ahead [s]
+
 
   /**
    Default constructor
@@ -62,21 +66,21 @@ public:
    @param ref_velocity   Reference velocity [m/s].
    @param start_lane     ID of current lane [0=left, 1=center, 2=right].
    */
-  BehaviorPlanner(SensorFusion* sensor_fusion, double velocity, const int start_lane = 1);
+  BehaviorPlanner(SensorFusion* sensor_fusion, const double ref_velocity, const int start_lane = 1);
   
   /**
    Plans the next behavior.
    
    @return Returns the next state (behavior).
    */
-  BehaviorState NextBehavior();
+  BehaviorState Update();
   
   /**
    Returns the behavior state as a user readable string.
    
    @return Returns the behavior state as string.
    */
-  string GetStateAsString(BehaviorState state);
+  string GetStateAsString(BehaviorState state) const;
   
   /**
    Returns the target lane ID for the current behavior (state).
@@ -85,7 +89,60 @@ public:
    */
   int GetTargetLane();
   
+  /**
+   Overload standard output stream.
+   */
+  friend std::ostream& operator<< (std::ostream& os, const BehaviorPlanner& obj);
+  
 private:
+  const double kMinTimeGap_ = 2.0;                // min allowed time gap to vehicle ahead [s]
+  const double kDefaultTimaGab_ = 9999.9;         // default resp. max time gap [s]
+
+  const double kBufferToSpeedLimit_ = 0.5;     // buffer to speed limit [m/s]
+  const double kZeroVelocityCost_ = 0.8;       // cost for velocity = 0 m/s
+  
+  const double kWeightSpeedLimit_                           = 1.0;
+  const double kWeightHostVelocityCloseToReferenceVelocity_ = 0.9;
+  
+  std::vector<double> weigthedCost_;
+  std::vector<double> costSpeedLimit_;
+  std::vector<double> costHostVelocityCloseToReferenceVelocity_;
+  
+  /**
+   Calculates the weighted costs over all cost classes.
+   */
+  void CalculateWeightedCost();
+  
+  /********** SAFETY COSTS FUNCTIONS **********/
+  
+  /********** LEGALITY COSTS FUNCTIONS **********/
+  
+  /**
+   Calculates the cost for keeping the speed limit.
+   Cost class: LEGALITY
+   
+   @param lane    ID of lane [0=left, 1=center, 2=right].
+   
+   @return Cost value between 0 and 1.
+   */
+  double CostSpeedLimit(int lane);
+
+  /********** COMFORT COSTS FUNCTIONS **********/
+  
+  /********** EFFICIENCY COSTS FUNCTIONS **********/
+  
+  /**
+   Calculates the costs to keep the host velocity close to the reference velocity.
+   Cost class: EFFICIENCY
+
+   @param lane    ID of lane [0=left, 1=center, 2=right].
+
+   @return Cost value between 0 and 1.
+   */
+  double CostHostVelocityCloseToReferenceVelocity(int lane);
+  
+  /********** FINITE STATE MACHINE **********/
+  
   /**
    State Keep Lane: Vehicle keeps the lane as long the reference velocity could be kept.
    
@@ -105,8 +162,23 @@ private:
    
    @return Returns the next state (behavior).
    */
-
+  
   BehaviorState StateLaneChangeLeft();
+
+  /**
+   State Prepare Lane Change Right: Vehicle prepares for right lane change (e.g. adjusting speed, waiting for a safe gap,...).
+   
+   @return Returns the next state (behavior).
+   */
+  BehaviorState StatePrepareLaneChangeRight();
+  
+  /**
+   State Lane Change Right: Vehicle performs a right lane change.
+   
+   @return Returns the next state (behavior).
+   */
+  
+  BehaviorState StateLaneChangeRight();
 };
 
 #endif /* BehaviorPlanner_hpp */
