@@ -14,6 +14,7 @@
 #include "BehaviorPlanner.hpp"
 #include "VehicleModel.hpp"
 #include "SensorFusion.hpp"
+#include "BehaviorPlanner.hpp"
 
 
 using namespace std;
@@ -63,21 +64,17 @@ public:
   /**
    Contructor initializes the trajectory planner.
    
-   @param sensor_fusion  Pointer to the sensor fusion instance.
-   @param speed_limit    Max allowed velocity [m/s].
-   @param start_lane     Current driving lane [0-left, 1-center, 2-right].
+   @param sensor_fusion    Pointer to the sensor fusion instance.
+   @param behavior_planner Pointer to behvior planner instance.
+   @param speed_limit      Max allowed velocity [m/s].
+   @param start_lane       Current driving lane [0-left, 1-center, 2-right].
    */
-  TrajectoryPlanner(SensorFusion* sensor_fusion, const double speed_limit, const int start_lane);
+  TrajectoryPlanner(SensorFusion* sensor_fusion, BehaviorPlanner* behavior_planner, const double speed_limit, const int start_lane);
   
   /**
    Set the map waypoints.
    */
   void SetMapWaypoints(const vector<double>& x, const vector<double>& y, const vector<double>& s, const vector<double>& dx, const vector<double>& dy);
-  
-  /**
-   Set sensor fusion results.
-   */
-  void SetSensorFusion(SensorFusion* sensor_fusion);
   
   /**
    Set the target/reference velocity of the host vehicle.
@@ -90,15 +87,19 @@ public:
    Finds the optimal and collision free trajectory to achieve target behavior.
    
    @param previous_trajectory  Previous trajectory provided by the simulator.
-   @param host_vehicle         Host vehicle model.
-   @param behavior_state       Target behavior (e.g. keep lane, change lane left, ...).
    
    @return Returns the trajectory.
    */
-  Trajectory PlanOptimalTrajectory(PreviousTrajectory& previous_trajectory, BehaviorState behavior_state);
+  Trajectory PlanOptimalTrajectory(PreviousTrajectory& previous_trajectory);
+  
+  /**
+   Overload standard output stream.
+   */
+  friend std::ostream& operator<< (std::ostream& os, const TrajectoryPlanner& obj);
   
 private:
-  const double kMinTimeGap = 2.0;                 // min allowed time gap to vehicle ahead [s]
+  const double kMinTimeGap_ = 2.0;                // min allowed time gap to vehicle ahead [s]
+  const double kDefaultTimaGab_ = 9999.9;         // default resp. max time gap [s]
   
   PreviousTrajectory previous_trajectory_;        // Previous driven trajectory.
   vector<double> points_x_;                       // x points of unfiltered trajectory
@@ -110,19 +111,13 @@ private:
   vector<double> map_waypoints_dx_;
   vector<double> map_waypoints_dy_;
   
+  BehaviorPlanner* behavior_planner_;             // Behavior planner instance
+  SensorFusion* sensor_fusion_;                   // Vehicle list incl. host vehicle
   int current_lane_;                              // current ego lane [0-left, 1-center, 2-right]
   int target_lane_;                               // target lane [0-left, 1-center, 2-right]
   double reference_velocity_;                     // reference velocity of host vehicle [m/s]
   double speed_limit_;                            // speed limit in [m/s]
-  BehaviorState behavior_state_;                  // target behavior
-  SensorFusion* sensor_fusion_;                   // Vehicle list incl. host vehicle
-  
-  /**
-   Returns the target lane ID for the current behavior (state).
-   
-   @return Returns the target lane [0-left, 1-center, 2-right].
-   */
-  int GetTargetLane();
+  double time_gap_;                               // time gap to vehicle ahead [s]
 };
 
 #endif /* TrajectoryPlanner_hpp */

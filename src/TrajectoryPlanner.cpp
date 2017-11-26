@@ -15,16 +15,16 @@ TrajectoryPlanner::TrajectoryPlanner() {
   target_lane_ = 0;
   reference_velocity_ = 0.0;
   speed_limit_ = 49.5;
-  behavior_state_ = BehaviorState::kInitialization;
+  behavior_planner_ = NULL;
   sensor_fusion_ = NULL;
 }
 
-TrajectoryPlanner::TrajectoryPlanner(SensorFusion* sensor_fusion, const double speed_limit, const int start_lane) {
+TrajectoryPlanner::TrajectoryPlanner(SensorFusion* sensor_fusion, BehaviorPlanner* behavior_planner, const double speed_limit, const int start_lane) {
   current_lane_ = start_lane;
   target_lane_ = start_lane;
   reference_velocity_ = 0.0;
   speed_limit_ = speed_limit;
-  behavior_state_ = BehaviorState::kInitialization;
+  behavior_planner_ = behavior_planner;
   sensor_fusion_ = sensor_fusion;
 }
 
@@ -39,18 +39,13 @@ void TrajectoryPlanner::SetMapWaypoints(const vector<double>& x, const vector<do
   map_waypoints_dy_ = dy;
 }
 
-void TrajectoryPlanner::SetSensorFusion(SensorFusion* sensor_fusion) {
-  sensor_fusion_ = sensor_fusion;
-}
-
 void TrajectoryPlanner::SetSpeedLimit(double speed_limit) {
   speed_limit_ = speed_limit;
 }
 
-Trajectory TrajectoryPlanner::PlanOptimalTrajectory(PreviousTrajectory& previous_trajectory, BehaviorState behavior_state) {
-  
-  behavior_state_ = behavior_state;
-  target_lane_ = GetTargetLane();
+Trajectory TrajectoryPlanner::PlanOptimalTrajectory(PreviousTrajectory& previous_trajectory) {
+  current_lane_ = behavior_planner_->current_lane_;
+  target_lane_ = behavior_planner_->target_lane_;
 
   // FIXME: Remove points from class
   points_x_.clear();
@@ -61,29 +56,26 @@ Trajectory TrajectoryPlanner::PlanOptimalTrajectory(PreviousTrajectory& previous
   double ref_x = host_vehicle.x_;
   double ref_y = host_vehicle.y_;
   double ref_yaw = host_vehicle.yaw_;
-  double time_gap = 9999.9;                          // time gap [s] to vehicle ahead
   
   // control speed depending on time gap to vehicle ahead
   VehicleModel* next_vehicle_in_current_lane = sensor_fusion_->GetNextVehicleDrivingAhead(current_lane_);
   
   if (next_vehicle_in_current_lane) {
     // found vehicle driving ahead, check time_gap
-    double delta_x = next_vehicle_in_current_lane->x_ - host_vehicle.x_;
-    double delta_y = next_vehicle_in_current_lane->y_ - host_vehicle.y_;
+    double delta_x = host_vehicle.x_ - next_vehicle_in_current_lane->x_;
+    double delta_y = host_vehicle.y_ - next_vehicle_in_current_lane->y_;
     double dist = sqrt(delta_x * delta_x + delta_y * delta_y);
-    time_gap = dist / next_vehicle_in_current_lane->v_;
+    time_gap_ = dist / next_vehicle_in_current_lane->v_;
   } else {
-    time_gap = 9999.9;
+    time_gap_ = kDefaultTimaGab_;
   }
   
   // FIXME: Check max acceleration rate
-  if (time_gap < kMinTimeGap) {
-    reference_velocity_ -= 0.1;
+  if (time_gap_ < kMinTimeGap_) {
+    reference_velocity_ = max(0.0, reference_velocity_ - 0.5);
   } else if (reference_velocity_ < speed_limit_) {
-    reference_velocity_ += 0.1;
+    reference_velocity_ = min(speed_limit_, reference_velocity_ + 0.5);
   }
-  
-  cout << "TrajectoryPlanner: ref_v=" << reference_velocity_/0.44704 << " mph, time_gap=" << time_gap << " s target_lane=" << target_lane_ << endl;
   
   // plan trajectory to target lane
   int prev_size = previous_trajectory.points_x.size();
@@ -193,18 +185,13 @@ Trajectory TrajectoryPlanner::PlanOptimalTrajectory(PreviousTrajectory& previous
   return trajectory;
 }
 
-int TrajectoryPlanner::GetTargetLane() {
-  switch (behavior_state_) {
-    case BehaviorState::kInitialization:
-    case BehaviorState::kKeepLane:
-      return current_lane_;
-    case BehaviorState::kPrepareLaneChangeLeft:
-    case BehaviorState::kLaneChangeLeft:
-      return max(current_lane_ - 1, 0);
-    case BehaviorState::kPrepareLaneChangeRight:
-    case BehaviorState::kLaneChangeRight:
-      return min(current_lane_ + 1, 2);
-    default:
-      return current_lane_;
-  }
+std::ostream& operator<< (std::ostream& os, const TrajectoryPlanner& obj) {
+  os << "TrajectoryPlanner(" << std::endl <<
+  " current_lane=         " << obj.current_lane_ << std::endl <<
+  " target_lane=          " << obj.target_lane_ << std::endl <<
+  " ref_velocity=         " << obj.reference_velocity_ / 0.44704 << " mph" << std::endl <<
+  " time_gap=             " << obj.time_gap_ << " s" << std::endl <<
+  ")" << std::endl;
+
+  return os;
 }
