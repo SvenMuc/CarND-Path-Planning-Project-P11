@@ -146,3 +146,25 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s, const vec
   
   return {x,y};
 }
+
+void WriteLogFile(int id, vector<double>predictions_x, vector<double> predictions_y) {
+  static ofstream log_stream;
+  
+  if (!log_stream.is_open()) {
+    log_stream.open(logging_file, ios::out | ios::app);
+  }
+
+    log_stream << "ID_" << id << ":\n";
+  
+  for(int i=0; i < predictions_x.size(); ++i) {
+    log_stream << predictions_x[i]  << ",";
+  }
+  log_stream << "\n";
+  
+  for(int i=0; i < predictions_x.size(); ++i) {
+    log_stream << predictions_y[i]  << ",";
+  }
+  log_stream << "\n";
+  
+  log_stream.flush();
+}

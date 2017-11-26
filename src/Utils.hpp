@@ -9,9 +9,18 @@
 #define Utils_hpp
 
 #include <stdio.h>
+#include <iostream>
 #include <vector>
+#include <fstream>
 
 using namespace std;
+
+const string logging_file = "logging.txt";                 // logging filename
+
+const double kControllerCycleTime = 0.02;                  // Cycle time of the vehicle controller between two trajectory points [s]
+const int    kNumberPredictionsPoints = 50;                // number of prediction points for e.g. the trajectory planner or vehicle model
+const double kPredictionTime = kControllerCycleTime * (double)kNumberPredictionsPoints;
+
 
 /**
  Returns PI.
@@ -49,5 +58,10 @@ vector<double> getFrenet(double x, double y, double theta, const vector<double> 
  Transform from Frenet s,d coordinates to Cartesian x,y.
  */
 vector<double> getXY(double s, double d, const vector<double> &maps_s, const vector<double> &maps_x, const vector<double> &maps_y);
+
+/**
+ Write status, vehicle model predictions, etc. to a csv file.
+ */
+void WriteLogFile(int id, vector<double>predictions_x, vector<double> predictions_y);
 
 #endif /* Utils_hpp */
