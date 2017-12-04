@@ -8,7 +8,6 @@
 #include "BehaviorPlanner.hpp"
 #include <iostream>
 #include <math.h>
-#include "Eigen-3.3/Eigen/Core"
 #include "Utils.hpp"
 
 using namespace std;
