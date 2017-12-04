@@ -72,13 +72,14 @@ public:
   void SetSpeedLimit(double speed_limit);
   
   /**
-   Finds the optimal and collision free trajectory to achieve target behavior.
+   Finds the optimal and collision free spline based  trajectory to achieve
+   target behavior.
    
    @param previous_trajectory  Previous trajectory provided by the simulator.
    
    @return Returns the trajectory.
    */
-  Trajectory PlanOptimalTrajectory(PreviousTrajectory& previous_trajectory);
+  Trajectory PlanSplineTrajectory(PreviousTrajectory& previous_trajectory);
   
   /**
    Overload standard output stream.
@@ -86,14 +87,10 @@ public:
   friend std::ostream& operator<< (std::ostream& os, const TrajectoryPlanner& obj);
   
 private:
-  const double kMaxDeltaVelocity = 0.22;          // Max delta velocity [m/s] between two waypoints to guarantee accelerations < 10 m/s2 jerks < 10 m/s3
+  const double kMaxDeltaVelocity = 0.09;          // Max delta velocity [m/s] between two waypoints to guarantee accelerations < 10 m/s2 jerks < 10 m/s3
   const double kMinTimeGap_ = 2.0;                // min allowed time gap to vehicle ahead [s]
-  const double kMinTimeGapLaneChange_ = 1.0;      // min allowed time gap to vehicle ahead during a lane change [s]
+  const double kMinTimeGapLaneChange_ = 1.0;      // min allowed time gap to vehicle ahead/behind during a lane change [s]
   const double kDefaultTimaGab_ = 9999.9;         // default resp. max time gap [s]
-  
-  PreviousTrajectory previous_trajectory_;        // Previous driven trajectory.
-  vector<double> points_x_;                       // x points of unfiltered trajectory
-  vector<double> points_y_;                       // y points of unfiltered trajectory
   
   vector<double> map_waypoints_x_;
   vector<double> map_waypoints_y_;

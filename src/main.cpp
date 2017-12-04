@@ -151,7 +151,7 @@ int main() {
                                              map_waypoints_s,
                                              map_waypoints_dx, map_waypoints_dy);
           
-          Trajectory trajectory = trajectory_planner.PlanOptimalTrajectory(previous_trajectory);
+          Trajectory trajectory = trajectory_planner.PlanSplineTrajectory(previous_trajectory);
           cout << trajectory_planner;
           
           json msgJson;
