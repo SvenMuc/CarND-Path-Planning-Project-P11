@@ -111,13 +111,13 @@ public:
 private:
   const double kLowerTimeGap_ = 1.5;                 // min allowed time gap to vehicle ahead [s]
   const double kUpperTimeGap_ = 3.5;                 // time gap [s] to drive with speed limit
-  const double kMinTimeGapInitLaneChange_ = 4.0;     // min allowed time gap to intiate a lane change [s]
+  const double kMinTimeGapInitLaneChange_ = 3.0;     // min allowed time gap to intiate a lane change [s]
   const double kMinTimeGapLaneChange_ = 1.0;         // min required time gap to vehicle in target lane [s]
   const double kMinDistanceFrontLaneChange_ = 10.0;  // min required distance to vehicle ahead in target lane [m]
   const double kMinDistanceRearLaneChange_ = 10.0;   // min required distance to vehicle behind in target lane [m]
   const double kMinTTCFrontLaneChange_ = 6.0;        // min required time-to-collision to vehicle ahead in target lane [s]
   const double kMinTTCRearLaneChange_ = 6.0;         // min required time-to-collision to vehicle behind in target lane [s]
-  const double kFastestLaneFactor = 0.05;            // the fastest lane velocity need to  be x% faster than the current [%]
+  const double kFastestLaneFactor = 0.08;            // the fastest lane velocity need to  be x% faster than the current [%]
 
   const double kDefaultTimaGab_ = 9999.9;            // default resp. max time gap [s]
   const double kDefaultTTC_ = 9999.9;                // default resp. max time-to-collision [s]
