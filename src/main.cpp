@@ -75,21 +75,18 @@ int main() {
     map_waypoints_dy.push_back(d_y);
   }
   
-  // Setup the sensor fusion, behavior and trajectory planner
-  int current_lane = 1;                   // starting lane = center lane
-  double speed_limit = 49.5 * 0.44704;    // max allowed speed [m/s]
-  
+  // Setup the sensor fusion, behavior and trajectory planner  
   SensorFusion fusion = SensorFusion();
   
   // set speed limits for all lanes
-  std::vector<double> limits = {speed_limit, speed_limit, speed_limit};
+  std::vector<double> limits = {kSpeedLimit, kSpeedLimit, kSpeedLimit};
   fusion.SetSpeedLimitsForLanes(limits);
 
-  BehaviorPlanner behavior_planner = BehaviorPlanner(&fusion, speed_limit, current_lane);
-  TrajectoryPlanner trajectory_planner = TrajectoryPlanner(&fusion, &behavior_planner, speed_limit, current_lane);
+  BehaviorPlanner behavior_planner = BehaviorPlanner(&fusion, kSpeedLimit, kStartLane);
+  TrajectoryPlanner trajectory_planner = TrajectoryPlanner(&fusion, &behavior_planner, kStartLane);
   
   
-  h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy,&current_lane,&fusion,&behavior_planner,&trajectory_planner](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
+  h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy,&fusion,&behavior_planner,&trajectory_planner](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
@@ -137,7 +134,7 @@ int main() {
           }
           
           fusion.Update(kPredictionTime);
-          cout << fusion;
+          //cout << fusion;
           
           // Update behavior planner
           behavior_planner.Update();

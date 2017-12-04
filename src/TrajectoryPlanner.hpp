@@ -15,9 +15,9 @@
 #include "VehicleModel.hpp"
 #include "SensorFusion.hpp"
 #include "BehaviorPlanner.hpp"
+#include "Utils.hpp"
 
 
-using namespace std;
 using json = nlohmann::json;
 
 /**
@@ -50,26 +50,14 @@ struct PreviousTrajectory {
 class TrajectoryPlanner
 {
 public:
-  
-  /**
-   Default constructor.
-   */
-  TrajectoryPlanner();
-  
-  /**
-   Default destructor.
-   */
-  ~TrajectoryPlanner();
-  
   /**
    Contructor initializes the trajectory planner.
    
-   @param sensor_fusion    Pointer to the sensor fusion instance.
-   @param behavior_planner Pointer to behvior planner instance.
-   @param speed_limit      Max allowed velocity [m/s].
-   @param start_lane       Current driving lane [0-left, 1-center, 2-right].
+   @param sensor_fusion       Pointer to the sensor fusion instance.
+   @param behavior_planner    Pointer to behvior planner instance.
+   @param start_lane          Current driving lane [0-left, 1-center, 2-right].
    */
-  TrajectoryPlanner(SensorFusion* sensor_fusion, BehaviorPlanner* behavior_planner, const double speed_limit, const int start_lane);
+  TrajectoryPlanner(SensorFusion* sensor_fusion, BehaviorPlanner* behavior_planner, const int start_lane);
   
   /**
    Set the map waypoints.
@@ -98,7 +86,9 @@ public:
   friend std::ostream& operator<< (std::ostream& os, const TrajectoryPlanner& obj);
   
 private:
+  const double kMaxDeltaVelocity = 0.22;          // Max delta velocity [m/s] between two waypoints to guarantee accelerations < 10 m/s2 jerks < 10 m/s3
   const double kMinTimeGap_ = 2.0;                // min allowed time gap to vehicle ahead [s]
+  const double kMinTimeGapLaneChange_ = 1.0;      // min allowed time gap to vehicle ahead during a lane change [s]
   const double kDefaultTimaGab_ = 9999.9;         // default resp. max time gap [s]
   
   PreviousTrajectory previous_trajectory_;        // Previous driven trajectory.
@@ -115,6 +105,7 @@ private:
   SensorFusion* sensor_fusion_;                   // Vehicle list incl. host vehicle
   int current_lane_;                              // current ego lane [0-left, 1-center, 2-right]
   int target_lane_;                               // target lane [0-left, 1-center, 2-right]
+  double target_velocity_;                        // target velocity of host vehicle [m/s] ("set speed" resp. velocity of target vehicle)
   double reference_velocity_;                     // reference velocity of host vehicle [m/s]
   double speed_limit_;                            // speed limit in [m/s]
   double time_gap_;                               // time gap to vehicle ahead [s]

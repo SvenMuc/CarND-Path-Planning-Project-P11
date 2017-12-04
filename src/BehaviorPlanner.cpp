@@ -9,38 +9,64 @@
 #include <iostream>
 #include <math.h>
 #include "Eigen-3.3/Eigen/Core"
+#include "Utils.hpp"
 
 using namespace std;
 
-BehaviorPlanner::BehaviorPlanner() {
-  current_state_ = BehaviorState::kInitialization;
-  current_lane_ = 0;
-  target_lane_ = 0;
-  fastest_lane_ = 0;
-  ref_velocity_ = 0;
-  time_gap_ = kDefaultTimaGab_;
-  sensor_fusion_ = NULL;
-  
-  for (int lane=0; lane < sensor_fusion_->number_lanes_; ++lane) {
-    weigthedCost_.push_back(0.0);
-    costSpeedLimit_.push_back(0.0);
-    costHostVelocityCloseToReferenceVelocity_.push_back(0.0);
-  }
-}
-
 BehaviorPlanner::BehaviorPlanner(SensorFusion* sensor_fusion, const double ref_velocity, const int start_lane) {
+  sensor_fusion_ = sensor_fusion;
   current_state_ = BehaviorState::kKeepLane;
   current_lane_ = start_lane;
   target_lane_ = start_lane;
-  ref_velocity_ = ref_velocity;
-  time_gap_ = kDefaultTimaGab_;
-  sensor_fusion_ = sensor_fusion;
+  target_velocity_ = ref_velocity;
+  next_vehicle_current_lane_ = NULL;
+  front_vehicle_target_lane_ = NULL;
+  rear_vehicle_target_lane_ = NULL;
+  d_predicted_current_lane_front_ = kDefaultDistance_;
+  d_predicted_target_lane_front_ = kDefaultDistance_;
+  d_predicted_target_lane_rear_ = kDefaultDistance_;
+  time_gap_current_lane_front_ = kDefaultTimaGab_;
+  time_gap_target_lane_front_ = kDefaultTimaGab_;
+  time_gap_target_lane_rear_ = kDefaultTimaGab_;
+  time_gap_predicted_current_lane_front_ = kDefaultTimaGab_;
+  time_gap_predicted_target_lane_front_ = kDefaultTimaGab_;
+  time_gap_predicted_target_lane_rear_ = kDefaultTimaGab_;
+  ttc_current_lane_front_ = kDefaultTTC_;
+  ttc_target_lane_front_ = kDefaultTTC_;
+  ttc_target_lane_rear_ = kDefaultTTC_;
+  ttc_predicted_current_lane_front_ = kDefaultTTC_;
+  ttc_predicted_target_lane_front_ = kDefaultTTC_;
+  ttc_predicted_target_lane_rear_ = kDefaultTTC_;
+}
+
+BehaviorState BehaviorPlanner::Update() {
+  current_lane_ = sensor_fusion_->host_vehicle_.lane_;
+  fastest_lane_ = sensor_fusion_->GetReachableFastestLane(kFastestLaneFactor);
   
-  for (int lane=0; lane < sensor_fusion_->number_lanes_; ++lane) {
-    weigthedCost_.push_back(0.0);
-    costSpeedLimit_.push_back(0.0);
-    costHostVelocityCloseToReferenceVelocity_.push_back(0.0);
+  CalculateSafetyMeassures();
+  
+  switch (current_state_) {
+    case BehaviorState::kKeepLane:
+      current_state_ = StateKeepLane();
+      break;
+    case BehaviorState::kPrepareLaneChangeLeft:
+      current_state_ = StatePrepareLaneChangeLeft();
+      break;
+    case BehaviorState::kLaneChangeLeft:
+      current_state_ = StateLaneChangeLeft();
+      break;
+    case BehaviorState::kPrepareLaneChangeRight:
+      current_state_ = StatePrepareLaneChangeRight();
+      break;
+    case BehaviorState::kLaneChangeRight:
+      current_state_ = StateLaneChangeRight();
+      break;
+    default:
+      cout << "Error: Invalid behavior state." << endl;
+      break;
   }
+  
+  return current_state_;
 }
 
 string BehaviorPlanner::GetStateAsString(BehaviorState state) const {
@@ -78,71 +104,112 @@ int BehaviorPlanner::GetTargetLane() {
   }
 }
 
-BehaviorState BehaviorPlanner::Update() {
-  current_lane_ = sensor_fusion_->host_vehicle_.lane_;
-  fastest_lane_ = sensor_fusion_->GetReachableFastestLane();
-  CalculateWeightedCost();
-  
-  switch (current_state_) {
-    case BehaviorState::kKeepLane:
-      current_state_ = StateKeepLane();
-      break;
-    case BehaviorState::kPrepareLaneChangeLeft:
-      current_state_ = StatePrepareLaneChangeLeft();
-      break;
-    case BehaviorState::kLaneChangeLeft:
-      current_state_ = StateLaneChangeLeft();
-      break;
-    case BehaviorState::kPrepareLaneChangeRight:
-      current_state_ = StatePrepareLaneChangeRight();
-      break;
-    case BehaviorState::kLaneChangeRight:
-      current_state_ = StateLaneChangeRight();
-      break;
-    default:
-      cout << "Error: Invalid behavior state." << endl;
-      break;
-  }
-  
-  return current_state_;
-}
-
 BehaviorState BehaviorPlanner::StateKeepLane() {
-  VehicleModel* next_vehicle_in_current_lane = sensor_fusion_->GetNextVehicleDrivingAhead(current_lane_);
+
+  double speed_limit_current_lane = sensor_fusion_->GetSpeedLimitForCurrentLane();
+  double host_velocity = sensor_fusion_->host_vehicle_.v_;
   
-  if (next_vehicle_in_current_lane) {
-    // found vehicle driving ahead, check time_gap
-    double delta_x = sensor_fusion_->host_vehicle_.x_ - next_vehicle_in_current_lane->x_;
-    double delta_y = sensor_fusion_->host_vehicle_.y_ - next_vehicle_in_current_lane->y_;
-    double dist = sqrt(delta_x * delta_x + delta_y * delta_y);
-    time_gap_ = dist / next_vehicle_in_current_lane->v_;
+  // set target velocity
+  if (time_gap_current_lane_front_ <= kLowerTimeGap_) {
+    target_velocity_ = next_vehicle_current_lane_->v_;
+  } else if (time_gap_current_lane_front_ >= kUpperTimeGap_) {
+    target_velocity_ = speed_limit_current_lane;
+  }
+
+  // determine if left or right lane is free
+  bool is_left_lane_free;
+  int left_lane = max(0, current_lane_ - 1);
+  
+  if (left_lane == current_lane_ || sensor_fusion_->lane_occupancy_[current_lane_] == 0) {
+    is_left_lane_free = false;
   } else {
-    time_gap_ = kDefaultTimaGab_;
+    is_left_lane_free = (sensor_fusion_->lane_occupancy_[left_lane] == 0);
+  }
+
+  bool is_right_lane_free;
+  int right_lane = min(sensor_fusion_->number_lanes_-1, current_lane_ + 1);
+  
+  if (right_lane == current_lane_ || sensor_fusion_->lane_occupancy_[current_lane_] == 0) {
+    is_right_lane_free = false;
+  } else {
+    is_right_lane_free = (sensor_fusion_->lane_occupancy_[right_lane] == 0);
   }
   
-  if (time_gap_ < kMinTimeGap_) {
-    // close vehicle ahead, prepare lane change to fastest lane
-    if (fastest_lane_ < current_lane_) {
-      target_lane_ = fastest_lane_;
-      return BehaviorState::kLaneChangeLeft;
-    } else if (fastest_lane_ > current_lane_) {
-      target_lane_ = fastest_lane_;
-      return  BehaviorState::kLaneChangeRight;
-    } else {
-      target_lane_ = current_lane_;
-      return BehaviorState::kKeepLane;
-    }
+  is_left_lane_free = false;
+  is_right_lane_free = false;
+
+  // determine next behavior state
+  // close vehicle ahead, prepare lane change to fastest lane
+  if (host_velocity < speed_limit_current_lane &&
+      time_gap_current_lane_front_ <= kMinTimeGapInitLaneChange_ &&
+      /*sensor_fusion_->average_lane_velocities_[current_lane_] < speed_limit_current_lane &&*/
+      (fastest_lane_ < current_lane_ || is_left_lane_free)) {
+    target_lane_ = fastest_lane_;
+    return BehaviorState::kPrepareLaneChangeLeft;
+  } else if (host_velocity < speed_limit_current_lane &&
+             time_gap_current_lane_front_ <= kMinTimeGapInitLaneChange_ &&
+             /*sensor_fusion_->average_lane_velocities_[current_lane_] &&*/
+             (fastest_lane_ > current_lane_ || is_right_lane_free)) {
+    target_lane_ = fastest_lane_;
+    return  BehaviorState::kPrepareLaneChangeRight;
   } else {
     // free driving, keep lane
+    target_lane_ = current_lane_;
     return BehaviorState::kKeepLane;
   }
 }
 
+bool BehaviorPlanner::isTargetLaneSafe() {
+  if (/*time_gap_target_lane_front_ >= kMinTimeGapLaneChange_ &&*/
+      time_gap_target_lane_rear_ >= kMinTimeGapLaneChange_ &&
+      d_target_lane_front_ >= kMinDistanceFrontLaneChange_ &&
+      d_target_lane_rear_ >= kMinDistanceRearLaneChange_ &&
+      ttc_target_lane_front_ >= kMinTTCFrontLaneChange_ &&
+      ttc_target_lane_rear_ >= kMinTTCRearLaneChange_) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
 BehaviorState BehaviorPlanner::StatePrepareLaneChangeLeft() {
-  return BehaviorState::kPrepareLaneChangeLeft;
+  CalculateSafetyMeassures();
+  
+  // set target velocity
+  if (next_vehicle_current_lane_) {
+    target_velocity_ = next_vehicle_current_lane_->v_;
+  } else {
+    target_velocity_ = sensor_fusion_->GetSpeedLimitForCurrentLane();
+  }
+  
+  // determine next behavior state
+  if (isTargetLaneSafe()) {
+    return BehaviorState::kLaneChangeLeft;
+//  } else if (sensor_fusion_->average_lane_velocities_[target_lane_] - sensor_fusion_->average_lane_velocities_[current_lane_] >=
+//             sensor_fusion_->average_lane_velocities_[target_lane_] * kFastestLaneFactor) {
+//    // current lane is faster than target lane, cancel lane change
+//    return BehaviorState::kKeepLane;
+  } else {
+    // still unsafe to change to the left lane, wait
+    return BehaviorState::kPrepareLaneChangeLeft;
+  }
 }
 
 BehaviorState BehaviorPlanner::StateLaneChangeLeft() {
+  CalculateSafetyMeassures();
+  
+  // set target velocity
+  if (front_vehicle_target_lane_ && current_lane_ != target_lane_) {
+    // vehicle is not yet in the target lane
+    target_velocity_ = front_vehicle_target_lane_->v_;
+  } else if (next_vehicle_current_lane_ && current_lane_ == target_lane_) {
+    // vehicle is already in target lane, the vehicle switched from target to current lane
+    target_velocity_ = next_vehicle_current_lane_->v_;
+  } else {
+    target_velocity_ = sensor_fusion_->GetSpeedLimitForLane(target_lane_);
+  }
+  
+  // determine next state
   double d_left_lane_marker = (target_lane_ + 1) * sensor_fusion_->kLaneWidth_;
   double d_right_host_vehicle = sensor_fusion_->host_vehicle_.d_ + (sensor_fusion_->host_vehicle_.width_ / 2.0);
   
@@ -154,10 +221,43 @@ BehaviorState BehaviorPlanner::StateLaneChangeLeft() {
 }
 
 BehaviorState BehaviorPlanner::StatePrepareLaneChangeRight() {
+  CalculateSafetyMeassures();
+  
+  // set target velocity
+  if (next_vehicle_current_lane_) {
+    target_velocity_ = next_vehicle_current_lane_->v_;
+  } else {
+    target_velocity_ = sensor_fusion_->GetSpeedLimitForCurrentLane();
+  }
+  
+  // determine next state
+  if (isTargetLaneSafe()) {
+    return BehaviorState::kLaneChangeRight;
+//  } else if (sensor_fusion_->average_lane_velocities_[target_lane_] - sensor_fusion_->average_lane_velocities_[current_lane_] >
+//             sensor_fusion_->average_lane_velocities_[target_lane_] * kFastestLaneFactor) {
+//    // current lane is faster than target lane, cancel lane change
+//    return BehaviorState::kKeepLane;
+  } else {
+    // still unsafe to change to the right lane, wait
     return BehaviorState::kPrepareLaneChangeRight;
+  }
 }
 
 BehaviorState BehaviorPlanner::StateLaneChangeRight() {
+  CalculateSafetyMeassures();
+
+  // set target velocity
+  if (front_vehicle_target_lane_ && current_lane_ != target_lane_) {
+    // vehicle is not yet in the target lane
+    target_velocity_ = front_vehicle_target_lane_->v_;
+  } else if (next_vehicle_current_lane_ && current_lane_ == target_lane_) {
+    // vehicle is already in target lane, the vehicle switched from target to current lane
+    target_velocity_ = next_vehicle_current_lane_->v_;
+  } else {
+    target_velocity_ = sensor_fusion_->GetSpeedLimitForLane(target_lane_);
+  }
+
+  // determine next state
   double d_right_lane_marker = target_lane_ * sensor_fusion_->kLaneWidth_;
   double d_left_host_vehicle = sensor_fusion_->host_vehicle_.d_ - (sensor_fusion_->host_vehicle_.width_ / 2.0);
   
@@ -168,60 +268,189 @@ BehaviorState BehaviorPlanner::StateLaneChangeRight() {
   }
 }
 
-void BehaviorPlanner::CalculateWeightedCost() {
-  double sum_weights = kWeightSpeedLimit_ + kWeightHostVelocityCloseToReferenceVelocity_;
+double BehaviorPlanner::CalculateDistance(const double host_x, const double host_y,  const double target_x, const double target_y) {
+  double delta_x = target_x - host_x;
+  double delta_y = target_y - host_y;
   
-  for (int lane=0; lane < sensor_fusion_->number_lanes_; ++lane) {
-    costSpeedLimit_[lane] = CostSpeedLimit(lane);
-    costHostVelocityCloseToReferenceVelocity_[lane] = CostHostVelocityCloseToReferenceVelocity(lane);
+  return sqrt(delta_x * delta_x + delta_y * delta_y);
+}
+
+double BehaviorPlanner::CalculateTimeGap(const double host_v, const double host_x, const double host_y, const double target_x, const double target_y) {
+  double delta_x = target_x - host_x;
+  double delta_y = target_y - host_y;
+  double dist = sqrt(delta_x * delta_x + delta_y * delta_y);
+  
+  return dist / host_v;
+}
+
+double BehaviorPlanner::CalculateTTC(const double host_v, const double host_x, const double host_y, const double target_v, const double target_x, const double target_y) {
+  double delta_x = target_x - host_x;
+  double delta_y = target_y - host_y;
+  double dist = sqrt(delta_x * delta_x + delta_y * delta_y);
+  double delta_v = host_v - target_v;
+  
+  return abs(dist / delta_v);
+}
+
+void BehaviorPlanner::CalculateSafetyMeassures() {
+  
+  // Calculate time gap for current lane
+  next_vehicle_current_lane_ = sensor_fusion_->GetNextVehicleDrivingAhead(current_lane_);
+  
+  if (next_vehicle_current_lane_) {
+    // found vehicle driving ahead, check time_gap
+    d_current_lane_front_ = CalculateDistance(sensor_fusion_->host_vehicle_.x_, sensor_fusion_->host_vehicle_.y_,
+                                              next_vehicle_current_lane_->x_, next_vehicle_current_lane_->y_);
     
-    weigthedCost_[lane] = (kWeightSpeedLimit_ * costSpeedLimit_[lane] +
-                           kWeightHostVelocityCloseToReferenceVelocity_ * costHostVelocityCloseToReferenceVelocity_[lane]) / sum_weights;
+    d_predicted_current_lane_front_ = CalculateDistance(sensor_fusion_->host_vehicle_.predicted_x_, sensor_fusion_->host_vehicle_.predicted_y_,
+                                                        next_vehicle_current_lane_->predicted_x_, next_vehicle_current_lane_->predicted_y_);
+
+    time_gap_current_lane_front_ = CalculateTimeGap(sensor_fusion_->host_vehicle_.v_,
+                                                    sensor_fusion_->host_vehicle_.x_, sensor_fusion_->host_vehicle_.y_,
+                                                    next_vehicle_current_lane_->x_, next_vehicle_current_lane_->y_);
+
+    time_gap_predicted_current_lane_front_ = CalculateTimeGap(sensor_fusion_->host_vehicle_.predicted_v_,
+                                                    sensor_fusion_->host_vehicle_.predicted_x_, sensor_fusion_->host_vehicle_.predicted_y_,
+                                                    next_vehicle_current_lane_->predicted_x_, next_vehicle_current_lane_->predicted_y_);
+    
+    ttc_current_lane_front_ = CalculateTTC(sensor_fusion_->host_vehicle_.v_,
+                                                     sensor_fusion_->host_vehicle_.x_, sensor_fusion_->host_vehicle_.y_,
+                                                     next_vehicle_current_lane_->v_,
+                                                     next_vehicle_current_lane_->x_, next_vehicle_current_lane_->y_);
+
+    ttc_predicted_current_lane_front_ = CalculateTTC(sensor_fusion_->host_vehicle_.predicted_v_,
+                                                     sensor_fusion_->host_vehicle_.predicted_x_, sensor_fusion_->host_vehicle_.predicted_y_,
+                                                     next_vehicle_current_lane_->predicted_v_,
+                                                     next_vehicle_current_lane_->predicted_x_, next_vehicle_current_lane_->predicted_y_);
+  } else {
+    d_current_lane_front_ = kDefaultDistance_;
+    d_predicted_current_lane_front_ = kDefaultDistance_;
+    time_gap_current_lane_front_ = kDefaultTimaGab_;
+    time_gap_predicted_current_lane_front_ = kDefaultTimaGab_;
+    ttc_current_lane_front_ = kDefaultTTC_;
+    ttc_predicted_current_lane_front_ = kDefaultTTC_;
   }
-}
 
-/********** SAFETY COSTS FUNCTIONS **********/
+  // Calculate time gaps for target lane
+  if (target_lane_ == current_lane_) {
+    d_target_lane_front_ = d_current_lane_front_;
+    d_target_lane_rear_ = kDefaultDistance_;
+    d_predicted_target_lane_front_ = d_predicted_current_lane_front_;
+    d_predicted_target_lane_rear_ = kDefaultDistance_;
+    time_gap_target_lane_front_ = time_gap_current_lane_front_;
+    time_gap_target_lane_rear_ = kDefaultTimaGab_;
+    time_gap_predicted_target_lane_front_ = time_gap_predicted_current_lane_front_;
+    time_gap_predicted_target_lane_rear_ = kDefaultTimaGab_;
+    ttc_target_lane_front_ = ttc_current_lane_front_;
+    ttc_target_lane_rear_ = kDefaultTTC_;
+    ttc_predicted_target_lane_front_ = ttc_predicted_current_lane_front_;
+    ttc_predicted_target_lane_rear_ = kDefaultTTC_;
+  } else {
+    front_vehicle_target_lane_ = sensor_fusion_->GetNextVehicleDrivingAhead(target_lane_);
+    
+    if (front_vehicle_target_lane_) {
+      // found vehicle driving ahead in target lane, check time gap
+      d_target_lane_front_ = CalculateDistance(sensor_fusion_->host_vehicle_.x_, sensor_fusion_->host_vehicle_.y_,
+                                               front_vehicle_target_lane_->x_, front_vehicle_target_lane_->y_);
 
-/********** LEGALITY COSTS FUNCTIONS **********/
+      d_predicted_target_lane_front_ = CalculateDistance(sensor_fusion_->host_vehicle_.predicted_x_, sensor_fusion_->host_vehicle_.predicted_y_,
+                                                         front_vehicle_target_lane_->predicted_x_, front_vehicle_target_lane_->predicted_y_);
 
-double BehaviorPlanner::CostSpeedLimit(int lane) {
-  return double((sensor_fusion_->host_vehicle_.v_ <=  sensor_fusion_->GetSpeedLimitForLane(lane)));
-}
+      time_gap_target_lane_front_ = CalculateTimeGap(sensor_fusion_->host_vehicle_.v_,
+                                                     sensor_fusion_->host_vehicle_.x_, sensor_fusion_->host_vehicle_.y_,
+                                                     front_vehicle_target_lane_->x_, front_vehicle_target_lane_->y_);
+      
+      time_gap_predicted_target_lane_front_ = CalculateTimeGap(sensor_fusion_->host_vehicle_.predicted_v_,
+                                                               sensor_fusion_->host_vehicle_.predicted_x_, sensor_fusion_->host_vehicle_.predicted_y_,
+                                                               front_vehicle_target_lane_->predicted_x_, front_vehicle_target_lane_->predicted_y_);
+      
+      ttc_target_lane_front_ = CalculateTTC(sensor_fusion_->host_vehicle_.v_,
+                                            sensor_fusion_->host_vehicle_.x_, sensor_fusion_->host_vehicle_.y_,
+                                            front_vehicle_target_lane_->v_,
+                                            front_vehicle_target_lane_->x_, front_vehicle_target_lane_->y_);
 
-/********** COMFORT COSTS FUNCTIONS **********/
+      ttc_predicted_target_lane_front_ = CalculateTTC(sensor_fusion_->host_vehicle_.predicted_v_,
+                                                       sensor_fusion_->host_vehicle_.predicted_x_, sensor_fusion_->host_vehicle_.predicted_y_,
+                                                       front_vehicle_target_lane_->predicted_v_,
+                                                       front_vehicle_target_lane_->predicted_x_, front_vehicle_target_lane_->predicted_y_);
+    } else {
+      d_target_lane_front_ = kDefaultDistance_;
+      d_predicted_target_lane_front_ = kDefaultDistance_;
+      time_gap_target_lane_front_ = kDefaultTimaGab_;
+      time_gap_predicted_target_lane_front_ = kDefaultTimaGab_;
+      ttc_target_lane_front_ = kDefaultTTC_;
+      ttc_predicted_target_lane_front_ = kDefaultTTC_;
+    }
 
-/********** EFFICIENCY COSTS FUNCTIONS **********/
+    rear_vehicle_target_lane_ = sensor_fusion_->GetNextVehicleDrivingBehind(target_lane_);
 
-double BehaviorPlanner::CostHostVelocityCloseToReferenceVelocity(int lane) {
-  double speed_limit = sensor_fusion_->GetSpeedLimitForLane(lane);
-  double target_speed = speed_limit - kBufferToSpeedLimit_;
-  double v = sensor_fusion_->host_vehicle_.v_;
-  
-  if (v < target_speed) {
-    return kZeroVelocityCost_ * (target_speed - v) / target_speed;
-  } else if (v > target_speed && v <= speed_limit) {
-    return (v - target_speed) / kBufferToSpeedLimit_;
-  } else if (v > speed_limit) {
-    return 1.0;
+    if (rear_vehicle_target_lane_) {
+      // found vehicle driving behind in target lane, check time gap
+      d_target_lane_rear_ = CalculateDistance(sensor_fusion_->host_vehicle_.x_, sensor_fusion_->host_vehicle_.y_,
+                                              rear_vehicle_target_lane_->x_, rear_vehicle_target_lane_->y_);
+
+      d_predicted_target_lane_rear_ = CalculateDistance(sensor_fusion_->host_vehicle_.predicted_x_, sensor_fusion_->host_vehicle_.predicted_y_,
+                                                        rear_vehicle_target_lane_->predicted_x_, rear_vehicle_target_lane_->predicted_y_);
+
+      time_gap_target_lane_rear_ = CalculateTimeGap(sensor_fusion_->host_vehicle_.v_,
+                                                    sensor_fusion_->host_vehicle_.x_, sensor_fusion_->host_vehicle_.y_,
+                                                    rear_vehicle_target_lane_->x_, rear_vehicle_target_lane_->y_);
+      
+      time_gap_predicted_target_lane_rear_ = CalculateTimeGap(sensor_fusion_->host_vehicle_.predicted_v_,
+                                                              sensor_fusion_->host_vehicle_.predicted_x_, sensor_fusion_->host_vehicle_.predicted_y_,
+                                                              rear_vehicle_target_lane_->predicted_x_, rear_vehicle_target_lane_->predicted_y_);
+      
+      ttc_target_lane_rear_ = CalculateTTC(sensor_fusion_->host_vehicle_.v_,
+                                           sensor_fusion_->host_vehicle_.x_, sensor_fusion_->host_vehicle_.y_,
+                                           rear_vehicle_target_lane_->v_,
+                                           rear_vehicle_target_lane_->x_, rear_vehicle_target_lane_->y_);
+
+      ttc_predicted_target_lane_rear_ = CalculateTTC(sensor_fusion_->host_vehicle_.predicted_v_,
+                                                      sensor_fusion_->host_vehicle_.predicted_x_, sensor_fusion_->host_vehicle_.predicted_y_,
+                                                      rear_vehicle_target_lane_->predicted_v_,
+                                                      rear_vehicle_target_lane_->predicted_x_, rear_vehicle_target_lane_->predicted_y_);
+    } else {
+      d_target_lane_rear_ = kDefaultDistance_;
+      d_predicted_target_lane_rear_ = kDefaultDistance_;
+      time_gap_target_lane_rear_ = kDefaultTimaGab_;
+      time_gap_predicted_target_lane_rear_ = kDefaultTimaGab_;
+      ttc_target_lane_rear_ = kDefaultTTC_;
+      ttc_predicted_target_lane_rear_ = kDefaultTTC_;
+    }
   }
-  
-  return 1.0;
 }
 
 std::ostream& operator<< (std::ostream& os, const BehaviorPlanner& obj) {
   os << "BehaviorPlanner(" << std::endl <<
-  " time_gap=             " << obj.time_gap_ << " (<threshold= " << (obj.time_gap_ < obj.kMinTimeGap_) << ")" << std::endl <<
-  " fastest_lane=         " << obj.fastest_lane_ << " (" << (obj.sensor_fusion_->average_lane_velocities_ / 0.44704).transpose() << ") mph" << std::endl <<
-  " current_lane=         " << obj.current_lane_ << std::endl <<
-  " target_lane=          " << obj.target_lane_ << std::endl <<
-  " current_state=        " << static_cast<int>(obj.current_state_) << " - " << obj.GetStateAsString(obj.current_state_) << std::endl;
+//  " host vehicle=                         " << obj.sensor_fusion_->host_vehicle_ << std::endl <<
+//  " next vehicle current lane=            " << *obj.next_vehicle_current_lane_ << std::endl <<
+//  " front vehicle target lane=            " << *obj.front_vehicle_target_lane_ << std::endl <<
+//  " rear vehicle target lane=             " << *obj.rear_vehicle_target_lane_ << std::endl <<
+  " time_gap_current_lane=                " << "          --> " << obj.time_gap_current_lane_front_ << " s" << std::endl <<
+//  " time_gap_current_lane_predicted=      " << "          --> " << obj.time_gap_predicted_current_lane_front_ << " s" << std::endl <<
+  " time_gap_target_lane=                 " << obj.time_gap_target_lane_rear_ << " s <--> " << obj.time_gap_target_lane_front_ << " s" << std::endl <<
+//  " time_gap_target_lane_predicted=       " << obj.time_gap_predicted_target_lane_rear_ << " s <--> " << obj.time_gap_predicted_target_lane_front_ << " s" << std::endl <<
+  " ttc_current_lane=                     " << "          --> " << obj.ttc_current_lane_front_ << " s" << std::endl <<
+  " ttc_target_lane=                      " << obj.ttc_target_lane_rear_ << " s <--> " << obj.ttc_target_lane_front_ << " s" << std::endl <<
+//  " ttc_current_lane_predicted=           " << "          --> " << obj.ttc_predicted_current_lane_front_ << " s" << std::endl <<
+//  " ttc_target_lane_predicted=            " << obj.ttc_predicted_target_lane_rear_ << " s <--> " << obj.ttc_predicted_target_lane_front_ << " s" << std::endl <<
+  " d_current_lane=                       " << "          --> " << obj.d_current_lane_front_ << " m" << std::endl <<
+  " d_target_lane=                        " << obj.d_target_lane_rear_ << " m <--> " << obj.d_target_lane_front_ << " m" << std::endl <<
+//  " d_current_lane_predicted=             " << "--> " << obj.d_predicted_current_lane_front_ << " m" << std::endl <<
+//  " d_target_lane_predicted=              " << obj.d_predicted_target_lane_rear_ << " m <--> " << obj.d_predicted_target_lane_front_ << " m" << std::endl <<
+  " fastest_lane=                         " << obj.fastest_lane_ << " (" << (obj.sensor_fusion_->average_lane_velocities_ / 0.44704).transpose() << ") mph" << std::endl <<
+  " lane_oocupancy=                       " << obj.sensor_fusion_->lane_occupancy_.transpose() << std::endl <<
+  " current_lane=                         " << obj.current_lane_ << std::endl <<
+  " target_lane=                          " << obj.target_lane_ << std::endl <<
+  " target_velocity=                      " << ms2mph(obj.target_velocity_) << std::endl <<
+  " current_state=                        " << static_cast<int>(obj.current_state_) << " - " << obj.GetStateAsString(obj.current_state_) << std::endl;
   
-  for (int lane=0; lane < obj.sensor_fusion_->number_lanes_; ++lane) {
-    os <<
-    " Lane[" << lane << "] WeightedCost=                             " << obj.weigthedCost_[lane] << std::endl; // <<
-    //" Lane[" << lane << "] CostSpeedLimit=                           " << obj.costSpeedLimit_[lane] << std::endl <<
-    //" Lane[" << lane << "] CostHostVelocityCloseToReferenceVelocity= " << obj.costHostVelocityCloseToReferenceVelocity_[lane] << std::endl;
-  }
+//  for (int lane=0; lane < obj.sensor_fusion_->number_lanes_; ++lane) {
+//    os <<
+//    " Lane[" << lane << "] WeightedCost=                             " << obj.weigthedCost_[lane] << std::endl; // <<
+//    //" Lane[" << lane << "] CostSpeedLimit=                           " << obj.costSpeedLimit_[lane] << std::endl <<
+//    //" Lane[" << lane << "] CostHostVelocityCloseToReferenceVelocity= " << obj.costHostVelocityCloseToReferenceVelocity_[lane] << std::endl;
+//  }
   os << ")" << std::endl;
   
   return os;

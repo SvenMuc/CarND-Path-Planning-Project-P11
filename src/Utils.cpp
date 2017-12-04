@@ -24,6 +24,14 @@ double rad2deg(double x)
   return x * 180 / pi();
 }
 
+double mph2ms(double velocity) {
+  return velocity * 0.44704;
+}
+
+double ms2mph(double velocity) {
+  return velocity * 2.23694;
+}
+
 double distance(double x1, double y1, double x2, double y2)
 {
   return sqrt((x2-x1)*(x2-x1)+(y2-y1)*(y2-y1));

@@ -19,6 +19,7 @@ SensorFusion::~SensorFusion() {
 void SensorFusion::Update(double prediction_time) {
   RemoveOutdatedVehicleModels();
   average_lane_velocities_ = GetAverageVelocityForAllLanes();
+  lane_occupancy_ = GetLaneOccupancyForAllLanes();
   GenerateVehicleModelPredictions(prediction_time);
 }
 
@@ -30,6 +31,24 @@ void SensorFusion::SetHostVehicleModel(double x, double y, double s, double d, d
 void SensorFusion::SetSpeedLimitsForLanes(std::vector<double> speed_limits) {
   speed_limits_ = speed_limits;
   number_lanes_ = speed_limits_.size();
+}
+
+double SensorFusion::GetSpeedLimitForCurrentLane() {
+  int lane = host_vehicle_.lane_;
+  
+  if (lane >= 0 && lane < speed_limits_.size()) {
+    return speed_limits_[lane];
+  } else {
+    return 0.0;
+  }
+}
+
+double SensorFusion::GetSpeedLimitForLane(int lane) {
+  if (lane >= 0.0 && lane < speed_limits_.size()) {
+    return speed_limits_[lane];
+  } else {
+    return 0.0;
+  }
 }
 
 void SensorFusion::AddVehicleModel(VehicleModel* model) {
@@ -94,8 +113,7 @@ VehicleModel* SensorFusion::GetNextVehicleDrivingAhead(int lane) {
   VehicleModel* next_vehicle = NULL;
   
   for (auto& obj: object_map_) {
-    if (obj.second->d_ < (2 + kLaneWidth_ * lane + (kLaneWidth_/2.0)) &&
-        obj.second->d_ > (2 + kLaneWidth_ * lane - (kLaneWidth_/2.0))) {
+    if (obj.second->lane_ == lane) {
       // vehicle found in given lane
       // check if it is the initial one or closer than the last stored one
       double delta_s_object = obj.second->s_ - host_vehicle_.s_;
@@ -111,7 +129,6 @@ VehicleModel* SensorFusion::GetNextVehicleDrivingAhead(int lane) {
       }
     }
   }
-  
   return next_vehicle;
 }
 
@@ -119,8 +136,7 @@ VehicleModel* SensorFusion::GetNextVehicleDrivingBehind(int lane) {
   VehicleModel* next_vehicle = NULL;
   
   for (auto obj: object_map_) {
-    if (obj.second->d_ < (2 + kLaneWidth_ * lane + (kLaneWidth_/2.0)) &&
-        obj.second->d_ > (2 + kLaneWidth_ * lane - (kLaneWidth_/2.0))) {
+    if (obj.second->lane_ == lane) {
       // vehicle found in given lane
       // check if it is the initial one or closer than the last stored one
       double delta_s_object = obj.second->s_ - host_vehicle_.s_;
@@ -136,16 +152,7 @@ VehicleModel* SensorFusion::GetNextVehicleDrivingBehind(int lane) {
       }
     }
   }
-  
   return next_vehicle;
-}
-
-double SensorFusion::GetSpeedLimitForLane(int lane) {
-  if (lane >= 0.0 && lane < speed_limits_.size()) {
-    return speed_limits_[lane];
-  } else {
-    return 0.0;
-  }
 }
 
 int SensorFusion::GetFastestLane() {
@@ -162,13 +169,15 @@ int SensorFusion::GetFastestLane() {
   return lane;
 }
 
-int SensorFusion::GetReachableFastestLane() {
+int SensorFusion::GetReachableFastestLane(const double factor) {
   int left_lane = max(0, host_vehicle_.lane_ - 1);
   int right_lane = min(number_lanes_ - 1, host_vehicle_.lane_ + 1);
   
-  if (average_lane_velocities_[left_lane] > average_lane_velocities_[host_vehicle_.lane_]) {
+  if (average_lane_velocities_[left_lane] - average_lane_velocities_[host_vehicle_.lane_] >
+      average_lane_velocities_[host_vehicle_.lane_] * factor) {
     return left_lane;
-  } else if (average_lane_velocities_[right_lane] > average_lane_velocities_[host_vehicle_.lane_]) {
+  } else if (average_lane_velocities_[right_lane] - average_lane_velocities_[host_vehicle_.lane_] >
+             average_lane_velocities_[host_vehicle_.lane_] * factor) {
     return right_lane;
   } else {
     return host_vehicle_.lane_;
@@ -183,9 +192,9 @@ std::ostream& operator<< (std::ostream& os, const SensorFusion& obj) {
   }
   
   os <<
-  " host_vehicle_=" << std::endl << "  " << obj.host_vehicle_ << std::endl <<
-  " avg. lane velocities= " << obj.average_lane_velocities_.transpose() << " m/s (" << (obj.average_lane_velocities_ / 0.44704).transpose() << ") mph" << std::endl;
-
+  " host_vehicle_= " << std::endl << "  " << obj.host_vehicle_ << std::endl <<
+  " avg. lane velocities= " << obj.average_lane_velocities_.transpose() << " m/s (" << (obj.average_lane_velocities_ / 0.44704).transpose() << ") mph" << std::endl <<
+  " lane_occupancy=       " << obj.lane_occupancy_.transpose() << std::endl;
   os << ")" << std::endl;
   return os;
 }
@@ -220,11 +229,11 @@ Eigen::VectorXd SensorFusion::GetAverageVelocityForAllLanes() {
   std::vector<int> number_vehicles = {0, 0, 0};
   
   for (auto& obj: object_map_) {
-    double delta_s = host_vehicle_.s_ - obj.second->s_;
+    double delta_s = obj.second->s_ - host_vehicle_.s_;
     
     // ignore vehicles driving in host lane
-    // consider all vehicles within a given distance (s) range
-    if (obj.second->lane_ != host_vehicle_.lane_ && abs(delta_s) < kMaxDistanceForAvgVelocity_) {
+    // consider all vehicles driving ahead up to a given distance s
+    if (obj.second->lane_ != host_vehicle_.lane_ && delta_s > 0.0 && delta_s < kMaxDistanceForAvgVelocity_) {
       sum_velocities[obj.second->lane_] += obj.second->v_;
       number_vehicles[obj.second->lane_] += 1;
     }
@@ -246,4 +255,22 @@ Eigen::VectorXd SensorFusion::GetAverageVelocityForAllLanes() {
                              (number_vehicles[2] == 0 ? speed_limits_[2] : min(speed_limits_[2], sum_velocities[2] / number_vehicles[2]));
   
   return average_lane_velocities;
+}
+
+Eigen::VectorXi SensorFusion::GetLaneOccupancyForAllLanes() {
+  Eigen::VectorXi lane_occupancy(3);
+  lane_occupancy.setZero();
+  
+  for (int i=0; i < number_lanes_; ++i) {
+    std::vector<VehicleModel*> vehicles = GetAllVehiclesForLane(i);
+    
+    for (auto& obj: vehicles) {
+      double delta_s = obj->s_ - host_vehicle_.s_;
+      
+      if (delta_s > 0.0 && delta_s < kMaxDistanceLaneOccupancy_) {
+        lane_occupancy[i] += 1;
+      }
+    }
+  }
+  return lane_occupancy;
 }

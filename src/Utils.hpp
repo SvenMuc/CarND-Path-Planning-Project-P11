@@ -17,6 +17,8 @@ using namespace std;
 
 const string logging_file = "logging.txt";                 // logging filename
 
+const int    kStartLane = 1;                               // starting lane = center lane
+const double kSpeedLimit = 49.5 * 0.44704;                 // max allowed speed [m/s]
 const double kControllerCycleTime = 0.02;                  // Cycle time of the vehicle controller between two trajectory points [s]
 const int    kNumberPredictionsPoints = 50;                // number of prediction points for e.g. the trajectory planner or vehicle model
 const double kPredictionTime = kControllerCycleTime * (double)kNumberPredictionsPoints;
@@ -36,6 +38,16 @@ double deg2rad(double x);
  Converts rad to degree.
  */
 double rad2deg(double x);
+
+/**
+ Converts mph to m/s.
+ */
+double mph2ms(double velocity);
+
+/**
+ Converts m/s to mph.
+ */
+double ms2mph(double velocity);
 
 /**
  */

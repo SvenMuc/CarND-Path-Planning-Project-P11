@@ -45,20 +45,34 @@ const int kSensorFusionIndexD  = 6;
  */
 class BehaviorPlanner {
 public:
-  SensorFusion* sensor_fusion_;             // list of vehicle models based on sensor fusion
-  BehaviorState current_state_;             // current FSM state (behavior)
-  int current_lane_;                        // current lane ID
-  int target_lane_;                         // target lane ID
-  int fastest_lane_;                        // fastest lane ID
-  double ref_velocity_;                     // reference velocity to target [m/s]
-  double time_gap_;                         // time gap to vehicle ahead [s]
+  SensorFusion* sensor_fusion_;                       // list of vehicle models based on sensor fusion
+  BehaviorState current_state_;                       // current FSM state (behavior)
+  int current_lane_;                                  // current lane ID
+  int target_lane_;                                   // target lane ID
+  int fastest_lane_;                                  // fastest lane ID
+  VehicleModel* next_vehicle_current_lane_;           // next vehicle driving ahead in host lane
+  VehicleModel* front_vehicle_target_lane_;           // next vehicle driving ahead in target lane
+  VehicleModel* rear_vehicle_target_lane_;            // next vehicle driving behind in target lane
+  double target_velocity_;                            // target velocity (selected vehicle) [m/s]
+  double d_current_lane_front_;                       // distance to vehicle ahead [m]
+  double d_target_lane_front_;                        // distance to vehicle ahead in target lane [m]
+  double d_target_lane_rear_;                         // distance to vehicle behind in target lane [m]
+  double d_predicted_current_lane_front_;             // predicted distance to vehicle ahead [m]
+  double d_predicted_target_lane_front_;              // predicted distance to vehicle ahead in target lane [m]
+  double d_predicted_target_lane_rear_;               // predicted distance to vehicle behind in target lane [m]
+  double time_gap_current_lane_front_;                // time gap to vehicle ahead [s]
+  double time_gap_target_lane_front_;                 // time gap to vehicle ahead in target lane [s]
+  double time_gap_target_lane_rear_;                  // time gap to vehicle behind in target lane [s]
+  double time_gap_predicted_current_lane_front_;      // predicted time gap to vehicle ahead [s]
+  double time_gap_predicted_target_lane_front_;       // predicted time gap to vehicle ahead in target lane [s]
+  double time_gap_predicted_target_lane_rear_;        // predicted time gap to vehicle behind in target lane [s]
+  double ttc_current_lane_front_;                     // time-to-collision to vehicle ahead [s]
+  double ttc_target_lane_front_;                      // time-to-collision to vehicle ahead in target lane [s]
+  double ttc_target_lane_rear_;                       // time-to-collision to vehicle behind in target lane [s]
+  double ttc_predicted_current_lane_front_;           // predicted time-to-collision to vehicle ahead [s]
+  double ttc_predicted_target_lane_front_;            // predicted time-to-collision to vehicle ahead in target lane [s]
+  double ttc_predicted_target_lane_rear_;             // predicted time-to-collision to vehicle behind in target lane [s]
 
-
-  /**
-   Default constructor
-   */
-  BehaviorPlanner();
-  
   /**
    Constructor initializes the first state (behavior).
    
@@ -95,52 +109,72 @@ public:
   friend std::ostream& operator<< (std::ostream& os, const BehaviorPlanner& obj);
   
 private:
-  const double kMinTimeGap_ = 2.0;                // min allowed time gap to vehicle ahead [s]
-  const double kDefaultTimaGab_ = 9999.9;         // default resp. max time gap [s]
+  const double kLowerTimeGap_ = 1.5;                 // min allowed time gap to vehicle ahead [s]
+  const double kUpperTimeGap_ = 3.5;                 // time gap [s] to drive with speed limit
+  const double kMinTimeGapInitLaneChange_ = 4.0;     // min allowed time gap to intiate a lane change [s]
+  const double kMinTimeGapLaneChange_ = 1.0;         // min required time gap to vehicle in target lane [s]
+  const double kMinDistanceFrontLaneChange_ = 10.0;  // min required distance to vehicle ahead in target lane [m]
+  const double kMinDistanceRearLaneChange_ = 10.0;   // min required distance to vehicle behind in target lane [m]
+  const double kMinTTCFrontLaneChange_ = 6.0;        // min required time-to-collision to vehicle ahead in target lane [s]
+  const double kMinTTCRearLaneChange_ = 6.0;         // min required time-to-collision to vehicle behind in target lane [s]
+  const double kFastestLaneFactor = 0.05;            // the fastest lane velocity need to  be x% faster than the current [%]
 
-  const double kBufferToSpeedLimit_ = 0.5;     // buffer to speed limit [m/s]
-  const double kZeroVelocityCost_ = 0.8;       // cost for velocity = 0 m/s
-  
-  const double kWeightSpeedLimit_                           = 1.0;
-  const double kWeightHostVelocityCloseToReferenceVelocity_ = 0.9;
-  
-  std::vector<double> weigthedCost_;
-  std::vector<double> costSpeedLimit_;
-  std::vector<double> costHostVelocityCloseToReferenceVelocity_;
+  const double kDefaultTimaGab_ = 9999.9;            // default resp. max time gap [s]
+  const double kDefaultTTC_ = 9999.9;                // default resp. max time-to-collision [s]
+  const double kDefaultDistance_ = 9999.9;           // default resp. max distance to vehicles [m]
   
   /**
-   Calculates the weighted costs over all cost classes.
-   */
-  void CalculateWeightedCost();
-  
-  /********** SAFETY COSTS FUNCTIONS **********/
-  
-  /********** LEGALITY COSTS FUNCTIONS **********/
-  
-  /**
-   Calculates the cost for keeping the speed limit.
-   Cost class: LEGALITY
+   Calculates distance between two vehicles.
    
-   @param lane    ID of lane [0=left, 1=center, 2=right].
+   @param host_x    x map coordinate of host vehicle [m].
+   @param host_y    y map coordinate of host vehicle [m].
+   @param target_x  x map coordinate of target vehicle [m].
+   @param target_y  y map coordinate of target vehicle [m].
    
-   @return Cost value between 0 and 1.
+   @return Returns the time-to-collision between given vehilces [s].
    */
-  double CostSpeedLimit(int lane);
+  double CalculateDistance(const double host_x, const double host_y,  const double target_x, const double target_y);
 
-  /********** COMFORT COSTS FUNCTIONS **********/
-  
-  /********** EFFICIENCY COSTS FUNCTIONS **********/
+  /**
+   Calculates time gap between two vehicles.
+   
+   @param host_v    Velocity of host vehicle [m/s].
+   @param host_x    x map coordinate of host vehicle [m].
+   @param host_y    y map coordinate of host vehicle [m].
+   @param target_x  x map coordinate of target vehicle [m].
+   @param target_y  y map coordinate of target vehicle [m].
+   
+   @return Returns the time gap between given vehilces [s].
+   */
+  double CalculateTimeGap(const double host_v, const double host_x, const double host_y, const double target_x, const double target_y);
   
   /**
-   Calculates the costs to keep the host velocity close to the reference velocity.
-   Cost class: EFFICIENCY
-
-   @param lane    ID of lane [0=left, 1=center, 2=right].
-
-   @return Cost value between 0 and 1.
+   Calculates time-to-collsion between two vehicles.
+   
+   @param host_v    Velocity of host vehicle [m/s].
+   @param host_x    x map coordinate of host vehicle [m].
+   @param host_y    y map coordinate of host vehicle [m].
+   @param target_v  Velocity of target vehicle [m/s].
+   @param target_x  x map coordinate of target vehicle [m].
+   @param target_y  y map coordinate of target vehicle [m].
+   
+   @return Returns the time-to-collision between given vehilces [s].
    */
-  double CostHostVelocityCloseToReferenceVelocity(int lane);
+  double CalculateTTC(const double host_v, const double host_x, const double host_y, const double target_v,  const double target_x, const double target_y);
+
+  /**
+   Calculates the safety time gaps, TTC, and distances for the current
+   and target lane.
+   */
+  void CalculateSafetyMeassures();
   
+  /**
+   Checks whether the target lane is safe to drive or not.
+   
+   @return Returns true if the lane change is safe.
+   */
+  bool isTargetLaneSafe();
+
   /********** FINITE STATE MACHINE **********/
   
   /**

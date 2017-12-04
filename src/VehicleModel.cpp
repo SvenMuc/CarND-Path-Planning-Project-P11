@@ -70,33 +70,41 @@ VehicleModel::VehicleModel(double x, double y, double s, double d, double yaw, d
 }
 
 void VehicleModel::GeneratePredictions(double prediction_time) {
+  // TODO: determine ax_, ay_ and a_
+  prediction_time_ = prediction_time;
+
   // clear previous prediction results
-  prediction_x_.clear();
-  prediction_y_.clear();
-  prediction_vx_.clear();
-  prediction_vy_.clear();
-  prediction_ax_.clear();
-  prediction_ay_.clear();
-  prediction_v_.clear();
-  prediction_a_.clear();
-  prediction_yaw_.clear();
-  prediction_s_.clear();
-  prediction_d_.clear();
+  predicted_trajectory_x_.clear();
+  predicted_trajectory_y_.clear();
+  predicted_trajectory_vx_.clear();
+  predicted_trajectory_vy_.clear();
+  predicted_trajectory_ax_.clear();
+  predicted_trajectory_ay_.clear();
+  predicted_trajectory_v_.clear();
+  predicted_trajectory_a_.clear();
+  predicted_trajectory_yaw_.clear();
+  predicted_trajectory_s_.clear();
+  predicted_trajectory_d_.clear();
   
-  // predict vehicle trajectroy
+  // predict vehicle trajectory until prediction time
   for (int i=0; i < (prediction_time / kControllerCycleTime); ++i) {
     double dt = i * kControllerCycleTime;
-    prediction_x_.push_back(x_ + (vx_ * dt + 0.5 * ax_ * dt * dt));
-    prediction_y_.push_back(y_ + (vy_ * dt + 0.5 * ay_ * dt * dt));
+    predicted_trajectory_x_.push_back(x_ + (vx_ * dt + 0.5 * ax_ * dt * dt));
+    predicted_trajectory_y_.push_back(y_ + (vy_ * dt + 0.5 * ay_ * dt * dt));
     
-    //prediction_x_.push_back(x_ + (v_ * dt + 0.5 * a_ * dt * dt) * sin(yaw_));
-    //prediction_y_.push_back(y_ + (v_ * dt + 0.5 * a_ * dt * dt) * cos(yaw_));
-
-    // TODO: determine ax_ and ay_
-//    prediction_vx_.push_back(vx_ + ax_ * prediction_time);
-//    prediction_vy_.push_back(vy_ + ay_ * prediction_time);
-//    prediction_a_.push_back(v_ * a_ * prediction_time);
+    predicted_trajectory_vx_.push_back(vx_ + ax_ * prediction_time);
+    predicted_trajectory_vy_.push_back(vy_ + ay_ * prediction_time);
+    predicted_trajectory_v_.push_back(v_ + a_ * prediction_time);
   }
+  
+  // vehicle state at prediction time
+  double dt = prediction_time;
+  predicted_x_ = x_ + (vx_ * dt + 0.5 * ax_ * dt * dt);
+  predicted_y_ = y_ + (vy_ * dt + 0.5 * ay_ * dt * dt);
+  
+  predicted_vx_ = vx_ + ax_ * prediction_time;
+  predicted_vy_ = vy_ + ay_ * prediction_time;
+  predicted_v_ = v_ + a_ * prediction_time;
 }
 
 std::ostream& operator<< (std::ostream& os, const VehicleModel& vehicleModel) {

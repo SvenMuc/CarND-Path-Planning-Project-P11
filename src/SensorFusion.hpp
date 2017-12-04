@@ -26,10 +26,12 @@ public:
   VehicleModel host_vehicle_;                        // host vehicle model
   std::vector<double> speed_limits_;                 // speed limits per lane [0-left, 1-center, 2-right] [m/s]
   int number_lanes_;                                 // number of lanes
-  Eigen::VectorXd average_lane_velocities_;          // average velocity per lane [s/s]
-  
+  Eigen::VectorXd average_lane_velocities_;          // average velocity per lane [m/s]
+  Eigen::VectorXi lane_occupancy_;                   // number of vehicles driving ahead per lane
+
   const double kLaneWidth_ = 4.0;                    // default lane width
-  double const kMaxDistanceForAvgVelocity_ = 100.0;  // The average velocity is calucalted for vehicles in range of +/- x m
+  double const kMaxDistanceForAvgVelocity_ = 100;    // The average velocity is calucalted for vehicles in range of +/- x m
+  double const kMaxDistanceLaneOccupancy_ = 100;     // The average velocity is calucalted for vehicles in range of +/- x m
 
   /**
    Constructor.
@@ -68,6 +70,24 @@ public:
    */
   void SetSpeedLimitsForLanes(std::vector<double> speed_limits);
   
+  /**
+   Get speed limit for current lane.
+   
+   @return Returns the speed limit [m/s]. In case the host vehicle is
+   driving offroad 0 m/s is returned.
+   */
+  double GetSpeedLimitForCurrentLane();
+  
+  /**
+   Get speed limit for lane.
+   
+   @param lane  Lane id [0 = left lane, 1 = center lane, 2 = right lane]
+   
+   @return Returns the speed limit [m/s] for the requested lane. In case the
+   lane is not existing 0 m/s is returned.
+   */
+  double GetSpeedLimitForLane(int lane);
+
   /**
    Add a vehicle model to the sensor fusion object list.
    
@@ -135,16 +155,6 @@ public:
   VehicleModel* GetNextVehicleDrivingBehind(int lane);
   
   /**
-   Get speed limit for lane.
-   
-   @param lane  Lane id [0 = left lane, 1 = center lane, 2 = right lane]
-   
-   @return Returns the speed limit [m/s] for the requested lane. In case the
-   lane is not existing 0 m/s is returned.
-   */
-  double GetSpeedLimitForLane(int lane);
-
-  /**
    Get fastes lane.
    
    @return Returns the id of the fastest lane [-1=unknown, 0=left, 1=center, 2=right].
@@ -154,10 +164,12 @@ public:
   /**
    Get fastes lane which is either the adjacent or host lane.
    
+   @param factor  Percentage the fastest lane velocity needs to be higher.
+   
    @return Returns the id of the fastest reachable lane [-1=unknown, 0=left, 1=center, 2=right].
    */
-  int GetReachableFastestLane();
-
+  int GetReachableFastestLane(const double factor = 1.0);
+  
   /**
    Overload standard output stream.
    */
@@ -183,13 +195,21 @@ private:
   void GenerateVehicleModelPredictions(double prediction_time);
 
   /**
-   Determine average velocity for all laneas. If a lane is free the speed limit
-   is returned. For the host lane only vehicles driving ahead are considered.
+   Determine average velocity for all laneas based on vehicles driving ahead.
+   If a lane is free the speed limit is returned. For the host lane only the
+   next vehicle driving ahead is considered.
    
    @return Returns a vector with average velocities [m/s] for left, center and
    right lane.
    */
   Eigen::VectorXd GetAverageVelocityForAllLanes();
+  
+  /**
+   Determin lane occupancy ahead.
+   
+   @return Returns the number of vehicles driving ahead per lane [0-left, 1-center, 2-right].
+   */
+  Eigen::VectorXi GetLaneOccupancyForAllLanes();
 };
 
 #endif /* SensorFusion_hpp */

@@ -42,17 +42,29 @@ public:
   int lane_;                      // lane id [-1=unknown, 0-left, 1-center, 2-right]
   
   double prediction_time_;        // number of seconds to predict into the future [s]
-  vector<double> prediction_x_;   // prediced x positions [m]
-  vector<double> prediction_y_;   // prediced y positions [m]
-  vector<double> prediction_vx_;  // prediced velocity in x direction [m/s]
-  vector<double> prediction_vy_;  // prediced velocity in y direction [m/s]
-  vector<double> prediction_ax_;  // prediced acceleration in x direction [m/s^2]
-  vector<double> prediction_ay_;  // prediced acceleration in y direction [m/s^2]
-  vector<double> prediction_v_;   // prediced velocity [m/s]
-  vector<double> prediction_a_;   // prediced acceleration [m/s^2]
-  vector<double> prediction_yaw_; // prediced yaw angle (orientation) [rad]
-  vector<double> prediction_s_;   // prediced frenet s coordinates
-  vector<double> prediction_d_;   // prediced frenet d coordinates
+  double predicted_x_;            // prediced x positions [m]
+  double predicted_y_;            // prediced y positions [m]
+  double predicted_vx_;           // prediced velocity in x direction [m/s]
+  double predicted_vy_;           // prediced velocity in y direction [m/s]
+  double predicted_ax_;           // prediced acceleration in x direction [m/s^2]
+  double predicted_ay_;           // prediced acceleration in y direction [m/s^2]
+  double predicted_v_;            // prediced velocity [m/s]
+  double predicted_a_;            // prediced acceleration [m/s^2]
+  double predicted_yaw_;          // prediced yaw angle (orientation) [rad]
+  double predicted_s_;            // prediced frenet s coordinates
+  double predicted_d_;            // prediced frenet d coordinates
+
+  vector<double> predicted_trajectory_x_;   // prediced trajectory, x positions [m]
+  vector<double> predicted_trajectory_y_;   // prediced trajectory, y positions [m]
+  vector<double> predicted_trajectory_vx_;  // prediced trajectory, velocity in x direction [m/s]
+  vector<double> predicted_trajectory_vy_;  // prediced trajectory, velocity in y direction [m/s]
+  vector<double> predicted_trajectory_ax_;  // prediced trajectory, acceleration in x direction [m/s^2]
+  vector<double> predicted_trajectory_ay_;  // prediced trajectory, acceleration in y direction [m/s^2]
+  vector<double> predicted_trajectory_v_;   // prediced trajectory, velocity [m/s]
+  vector<double> predicted_trajectory_a_;   // prediced trajectory, acceleration [m/s^2]
+  vector<double> predicted_trajectory_yaw_; // prediced trajectory, yaw angle (orientation) [rad]
+  vector<double> predicted_trajectory_s_;   // prediced trajectory, frenet s coordinates
+  vector<double> predicted_trajectory_d_;   // prediced trajectory, frenet d coordinates
 
   /**
    Constructor initializes a default vehicle model.
