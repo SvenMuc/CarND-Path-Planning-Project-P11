@@ -7,6 +7,7 @@
 
 #include "BehaviorPlanner.hpp"
 #include <iostream>
+#include <iomanip>
 #include <math.h>
 #include "Utils.hpp"
 
@@ -421,35 +422,30 @@ void BehaviorPlanner::CalculateSafetyMeassures() {
 
 std::ostream& operator<< (std::ostream& os, const BehaviorPlanner& obj) {
   os << "BehaviorPlanner(" << std::endl <<
+    std::fixed << std::setprecision(2) << std::setfill(' ') <<
 //  " host vehicle=                         " << obj.sensor_fusion_->host_vehicle_ << std::endl <<
 //  " next vehicle current lane=            " << *obj.next_vehicle_current_lane_ << std::endl <<
 //  " front vehicle target lane=            " << *obj.front_vehicle_target_lane_ << std::endl <<
 //  " rear vehicle target lane=             " << *obj.rear_vehicle_target_lane_ << std::endl <<
-  " time_gap_current_lane=                " << "          --> " << obj.time_gap_current_lane_front_ << " s" << std::endl <<
-//  " time_gap_current_lane_predicted=      " << "          --> " << obj.time_gap_predicted_current_lane_front_ << " s" << std::endl <<
-  " time_gap_target_lane=                 " << obj.time_gap_target_lane_rear_ << " s <--> " << obj.time_gap_target_lane_front_ << " s" << std::endl <<
-//  " time_gap_target_lane_predicted=       " << obj.time_gap_predicted_target_lane_rear_ << " s <--> " << obj.time_gap_predicted_target_lane_front_ << " s" << std::endl <<
-  " ttc_current_lane=                     " << "          --> " << obj.ttc_current_lane_front_ << " s" << std::endl <<
-  " ttc_target_lane=                      " << obj.ttc_target_lane_rear_ << " s <--> " << obj.ttc_target_lane_front_ << " s" << std::endl <<
-//  " ttc_current_lane_predicted=           " << "          --> " << obj.ttc_predicted_current_lane_front_ << " s" << std::endl <<
-//  " ttc_target_lane_predicted=            " << obj.ttc_predicted_target_lane_rear_ << " s <--> " << obj.ttc_predicted_target_lane_front_ << " s" << std::endl <<
-  " d_current_lane=                       " << "          --> " << obj.d_current_lane_front_ << " m" << std::endl <<
-  " d_target_lane=                        " << obj.d_target_lane_rear_ << " m <--> " << obj.d_target_lane_front_ << " m" << std::endl <<
-//  " d_current_lane_predicted=             " << "--> " << obj.d_predicted_current_lane_front_ << " m" << std::endl <<
-//  " d_target_lane_predicted=              " << obj.d_predicted_target_lane_rear_ << " m <--> " << obj.d_predicted_target_lane_front_ << " m" << std::endl <<
-  " fastest_lane=                         " << obj.fastest_lane_ << " (" << (obj.sensor_fusion_->average_lane_velocities_ / 0.44704).transpose() << ") mph" << std::endl <<
-  " lane_oocupancy=                       " << obj.sensor_fusion_->lane_occupancy_.transpose() << std::endl <<
-  " current_lane=                         " << obj.current_lane_ << std::endl <<
-  " target_lane=                          " << obj.target_lane_ << std::endl <<
-  " target_velocity=                      " << ms2mph(obj.target_velocity_) << std::endl <<
-  " current_state=                        " << static_cast<int>(obj.current_state_) << " - " << obj.GetStateAsString(obj.current_state_) << std::endl;
-  
-//  for (int lane=0; lane < obj.sensor_fusion_->number_lanes_; ++lane) {
-//    os <<
-//    " Lane[" << lane << "] WeightedCost=                             " << obj.weigthedCost_[lane] << std::endl; // <<
-//    //" Lane[" << lane << "] CostSpeedLimit=                           " << obj.costSpeedLimit_[lane] << std::endl <<
-//    //" Lane[" << lane << "] CostHostVelocityCloseToReferenceVelocity= " << obj.costHostVelocityCloseToReferenceVelocity_[lane] << std::endl;
-//  }
+    " d_current_lane=                       " << "          --> " << std::setw(7) << obj.d_current_lane_front_ << " m" << std::endl <<
+    " time_gap_current_lane=                " << "          --> " << std::setw(7) << obj.time_gap_current_lane_front_ << " s" << std::endl <<
+    " ttc_current_lane=                     " << "          --> " << std::setw(7) << obj.ttc_current_lane_front_ << " s" << std::endl <<
+//  " time_gap_current_lane_predicted=      " << "          --> " << std::setw(7) << obj.time_gap_predicted_current_lane_front_ << " s" << std::endl <<
+//  " ttc_current_lane_predicted=           " << "          --> " << std::setw(7) << obj.ttc_predicted_current_lane_front_ << " s" << std::endl <<
+    " d_target_lane=                        " << std::setw(7) << obj.d_target_lane_rear_ << " m <--> " << std::setw(7) << obj.d_target_lane_front_ << " m" << std::endl <<
+    " time_gap_target_lane=                 " << std::setw(7) << obj.time_gap_target_lane_rear_ << " s <--> " << std::setw(7) << obj.time_gap_target_lane_front_ << " s" << std::endl <<
+    " ttc_target_lane=                      " << std::setw(7) << obj.ttc_target_lane_rear_ << " s <--> " << std::setw(7) << obj.ttc_target_lane_front_ << " s" << std::endl <<
+//  " d_current_lane_predicted=             " << "--> " << std::setw(7) << obj.d_predicted_current_lane_front_ << " m" << std::endl <<
+//  " d_target_lane_predicted=              " << std::setw(7) << obj.d_predicted_target_lane_rear_ << " m <--> " << std::setw(7) << obj.d_predicted_target_lane_front_ << " m" << std::endl <<
+//  " time_gap_target_lane_predicted=       " << std::setw(7) << obj.time_gap_predicted_target_lane_rear_ << " s <--> " << std::setw(7) << obj.time_gap_predicted_target_lane_front_ << " s" << std::endl <<
+//  " ttc_target_lane_predicted=            " << std::setw(7) << obj.ttc_predicted_target_lane_rear_ << " s <--> " << std::setw(7) << obj.ttc_predicted_target_lane_front_ << " s" << std::endl <<
+    " fastest_lane=                         " << obj.fastest_lane_ << " (" << (obj.sensor_fusion_->average_lane_velocities_ / 0.44704).transpose() << ") mph" << std::endl <<
+    " lane_oocupancy=                       " << obj.sensor_fusion_->lane_occupancy_.transpose() << std::endl <<
+    " current_lane=                         " << obj.current_lane_ << std::endl <<
+    " target_lane=                          " << obj.target_lane_ << std::endl <<
+    " target_velocity=                      " << ms2mph(obj.target_velocity_) << std::endl <<
+    " current_state=                        " << static_cast<int>(obj.current_state_) << " - " << obj.GetStateAsString(obj.current_state_) << std::endl;
+
   os << ")" << std::endl;
   
   return os;
