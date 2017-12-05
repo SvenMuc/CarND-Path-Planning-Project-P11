@@ -30,8 +30,8 @@ public:
   Eigen::VectorXi lane_occupancy_;                   // number of vehicles driving ahead per lane
 
   const double kLaneWidth_ = 4.0;                    // default lane width
-  double const kMaxDistanceForAvgVelocity_ = 100;    // The average velocity is calucalted for vehicles in range of +/- x m
-  double const kMaxDistanceLaneOccupancy_ = 100;     // The average velocity is calucalted for vehicles in range of +/- x m
+  const double kMaxDistanceForAvgVelocity_ = 100;    // The average velocity is calcualted for vehicles in range of x m ahead
+  const double kMaxDistanceLaneOccupancy_ = 100;     // The average velocity is calcualted for vehicles in range of x m ahead
 
   /**
    Constructor.
