@@ -427,9 +427,9 @@ std::ostream& operator<< (std::ostream& os, const BehaviorPlanner& obj) {
 //  " next vehicle current lane=            " << *obj.next_vehicle_current_lane_ << std::endl <<
 //  " front vehicle target lane=            " << *obj.front_vehicle_target_lane_ << std::endl <<
 //  " rear vehicle target lane=             " << *obj.rear_vehicle_target_lane_ << std::endl <<
-    " d_current_lane=                       " << "          --> " << std::setw(7) << obj.d_current_lane_front_ << " m" << std::endl <<
-    " time_gap_current_lane=                " << "          --> " << std::setw(7) << obj.time_gap_current_lane_front_ << " s" << std::endl <<
-    " ttc_current_lane=                     " << "          --> " << std::setw(7) << obj.ttc_current_lane_front_ << " s" << std::endl <<
+    " d_current_lane=                       " << "           --> " << std::setw(7) << obj.d_current_lane_front_ << " m" << std::endl <<
+    " time_gap_current_lane=                " << "           --> " << std::setw(7) << obj.time_gap_current_lane_front_ << " s" << std::endl <<
+    " ttc_current_lane=                     " << "           --> " << std::setw(7) << obj.ttc_current_lane_front_ << " s" << std::endl <<
 //  " time_gap_current_lane_predicted=      " << "          --> " << std::setw(7) << obj.time_gap_predicted_current_lane_front_ << " s" << std::endl <<
 //  " ttc_current_lane_predicted=           " << "          --> " << std::setw(7) << obj.ttc_predicted_current_lane_front_ << " s" << std::endl <<
     " d_target_lane=                        " << std::setw(7) << obj.d_target_lane_rear_ << " m <--> " << std::setw(7) << obj.d_target_lane_front_ << " m" << std::endl <<
